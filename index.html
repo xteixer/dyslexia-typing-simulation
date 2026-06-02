@@ -102,7 +102,7 @@
       border-radius: 20px;
       border: 1px solid rgba(255, 0, 85, 0.2);
       opacity: 0;
-      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transition: opacity 0.2s ease;
       font-weight: bold;
     }
     #combo-badge.active { opacity: 1; }
@@ -305,8 +305,8 @@
     let dyslexiaInterval;
     let isTimerRunning = false; 
 
-    let audioCtx = null;
-    let wordDisplay, inputBox, timerBar, scoreDisplay, statLabel, messageDisplay, leaderboardList, canvas, ctx;
+    // Referències DOM (Elements HTML)
+    let wordDisplay, inputBox, timerBar, scoreDisplay, messageDisplay, leaderboardList, canvas, ctx;
     let particles = [];
 
     function resizeCanvas() {
@@ -316,98 +316,39 @@
       }
     }
 
-    function playSound(type) {
-      try {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        const now = audioCtx.currentTime;
-
-        if (type === 'success') {
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(440, now);
-          osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
-          osc.start(now);
-          osc.stop(now + 0.15);
-        } else if (type === 'break') {
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(290, now);
-          osc.frequency.linearRampToValueAtTime(120, now + 0.2);
-          gain.gain.setValueAtTime(0.25, now);
-          gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
-          osc.start(now);
-          osc.stop(now + 0.2);
-        } else if (type === 'gameover') {
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(180, now);
-          osc.frequency.linearRampToValueAtTime(60, now + 0.6);
-          gain.gain.setValueAtTime(0.4, now);
-          gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
-          osc.start(now);
-          osc.stop(now + 0.6);
-        }
-      } catch (e) {
-        console.log("Audio issue.");
-      }
-    }
-
-    class ConfettiParticle {
-      constructor(x, y, customColor, isCelebration = false) {
+    class Particle {
+      constructor(x, y) {
         this.x = x;
         this.y = y;
-        const speedMultiplier = isCelebration ? 10 : 5;
-        this.size = Math.random() * (isCelebration ? 6 : 4) + 2;
-        this.speedX = (Math.random() - 0.5) * speedMultiplier;
-        this.speedY = (Math.random() - 0.6) * speedMultiplier; 
-        this.gravity = 0.15; 
-        
-        if (customColor) {
-          this.color = customColor;
-        } else {
-          const colors = ['#00e5ff', '#ff0055', '#ffa502', '#00ff66', '#ffff00'];
-          this.color = colors[Math.floor(Math.random() * colors.length)];
-        }
+        this.size = Math.random() * 3 + 1;
+        this.speedX = (Math.random() - 0.5) * 6;
+        this.speedY = (Math.random() - 0.5) * 6;
+        this.color = Math.random() > 0.5 ? '#00e5ff' : '#ff0055';
         this.alpha = 1;
-        this.rotation = Math.random() * Math.PI;
-        this.rotationSpeed = (Math.random() - 0.5) * 0.2;
       }
       update() {
-        this.speedY += this.gravity; 
         this.x += this.speedX;
         this.y += this.speedY;
-        this.rotation += this.rotationSpeed;
-        this.alpha -= 0.015; 
+        this.alpha -= 0.02;
       }
       draw() {
         ctx.save();
         ctx.globalAlpha = this.alpha;
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
         ctx.fillStyle = this.color;
-        ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
     }
 
-    function triggerExplosion(color, isCelebration = false) {
+    function triggerExplosion() {
       const wrapper = document.getElementById('word-wrapper');
+      if (!wrapper) return;
       const x = wrapper.offsetLeft + (wrapper.offsetWidth / 2);
       const y = wrapper.offsetTop + (wrapper.offsetHeight / 2);
-      
-      const count = isCelebration ? 55 : 25;
-      for (let i = 0; i < count; i++) {
-        particles.push(new ConfettiParticle(x, y, color, isCelebration));
+      for (let i = 0; i < 25; i++) {
+        particles.push(new Particle(x, y));
       }
     }
 
@@ -493,21 +434,19 @@
 
     function updateComboUI() {
       const badge = document.getElementById('combo-badge');
+      if (!badge) return;
       if (streak >= 9) {
         badge.innerText = `X3 COMBO`;
         badge.className = "active";
         badge.style.color = "var(--neon-orange)";
         badge.style.background = "rgba(255, 165, 2, 0.1)";
-        badge.style.transform = "scale(1.25)";
       } else if (streak >= 4) {
         badge.innerText = `X2 COMBO`;
         badge.className = "active";
         badge.style.color = "var(--neon-cyan)";
         badge.style.background = "rgba(0, 229, 255, 0.1)";
-        badge.style.transform = "scale(1.1)";
       } else {
         badge.className = "";
-        badge.style.transform = "scale(1)";
       }
     }
 
@@ -551,29 +490,33 @@
     }
 
     function setupInputListeners() {
-      // CAPTURA ÚNICA DEL BACKSPACE (Punt clau de la mecànica de pifia)
       inputBox.addEventListener('keydown', (e) => {
-        if (gameState !== "PLAYING") return;
+        if (gameState !== "PLAYING") {
+          if (e.key === 'Enter') {
+            if (gameState === "NAME_INPUT") submitScoreArcade();
+            else if (gameState === "WAITING_RESTART") initGame();
+          }
+          return;
+        }
 
-        // LA REGLA D'OR: Només penalitzem si borra l'usuari!
+        // LA REGAL D'OR: Penalitzar amb pèrdua de combo ÚNICAMENT si s'esborra (Backspace)
         if (e.key === "Backspace") {
           if (streak >= 4) {
             messageDisplay.style.color = "var(--neon-magenta)";
             messageDisplay.innerText = "Combo broken! Backspace penalty.";
-            triggerExplosion("var(--neon-magenta)", false); 
-            playSound('break'); 
+            triggerExplosion();
           }
           streak = 0;
           updateComboUI();
         }
-
-        if (e.key === 'Enter') {
-          if (gameState === "NAME_INPUT") submitScoreArcade();
-          else if (gameState === "WAITING_RESTART") initGame();
-        }
       });
 
       inputBox.addEventListener('input', (e) => {
+        if (gameState === "NAME_INPUT") {
+          e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').substring(0, 3);
+          return;
+        }
+        
         if (gameState !== "PLAYING") return;
 
         let typedValue = e.target.value.toLowerCase();
@@ -583,16 +526,10 @@
           startTimer();
         }
 
-        // NOTA: S'ha eliminat el tall de combo per escriure malament.
-        // Ara el jugador pot seguir cometent errors en silenci sense cap xof instantani.
-
-        // ENCERT DE PARAULA SENCERA
         if (typedValue.trim() === currentWord) {
           wordsCorrect++;
           streak++;
-          
-          triggerExplosion(null, true); 
-          playSound('success'); 
+          triggerExplosion();
           
           let pointsGained = calculateScorePoints();
           score += pointsGained;
@@ -614,19 +551,18 @@
       else if (playerName.length < 3) playerName = playerName.padEnd(3, 'X'); 
       inputBox.disabled = true;
       inputBox.value = "";
-      inputBox.placeholder = "Saving to cryptographic cloud...";
+      inputBox.placeholder = "Saving to typographic cloud...";
       
       if (API_URL) {
         try {
-          let response = await fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            body: JSON.stringify({ playerName: playerName, score: score, lang: currentLang })
-          });
+          // Solució de tramesa GET compatible al 100% amb Google Script sense bloquejos de CORS ni mòduls
+          let targetUrl = `${API_URL}?playerName=${encodeURIComponent(playerName)}&score=${score}&lang=${currentLang}`;
+          let response = await fetch(targetUrl, { method: 'GET', mode: 'cors' });
           let newLeaderboard = await response.json();
           renderLeaderboard(newLeaderboard);
         } catch(e) {
           console.error("Error saving leaderboard:", e);
+          leaderboardList.innerHTML = "<div style='color: var(--neon-magenta);'>Saved locally. Server Sync Issue.</div>";
         }
       }
       setupWaitingRestart();
@@ -634,11 +570,11 @@
 
     async function fetchLeaderboard() {
       if (!API_URL) {
-        leaderboardList.innerHTML = "<div style='color: #4a5568;'>Database offline (Local fallback)</div>";
+        leaderboardList.innerHTML = "<div style='color: #4a5568;'>Database offline</div>";
         return;
       }
       try {
-        let response = await fetch(API_URL);
+        let response = await fetch(API_URL, { method: 'GET', mode: 'cors' });
         let data = await response.json();
         renderLeaderboard(data);
       } catch (e) {
@@ -660,8 +596,6 @@
       clearInterval(dyslexiaInterval);
       streak = 0;
       updateComboUI();
-      
-      playSound('gameover'); 
       
       wordDisplay.className = "";
       wordDisplay.style.color = "var(--neon-magenta)";
@@ -699,15 +633,15 @@
       streak = 0;
       isTimerRunning = false;
       
-      if(scoreDisplay) scoreDisplay.innerText = score;
-      if(messageDisplay) messageDisplay.innerText = "";
-      if(wordDisplay) {
+      if (scoreDisplay) scoreDisplay.innerText = score;
+      if (messageDisplay) messageDisplay.innerText = "";
+      if (wordDisplay) {
         wordDisplay.style.color = "#ffffff";
         wordDisplay.className = "";
       }
       updateComboUI();
       
-      if(inputBox) {
+      if (inputBox) {
         inputBox.value = "";
         inputBox.disabled = false;
         inputBox.maxLength = 100; 
@@ -715,7 +649,7 @@
         inputBox.focus(); 
       }
       
-      if(timerBar) {
+      if (timerBar) {
         timerBar.style.width = "100%";
         timerBar.style.backgroundColor = "var(--neon-cyan)";
       }
@@ -725,11 +659,11 @@
     }
 
     window.onload = function() {
+      // CAPTURA I ASSIGNACIÓ DE VARIABLES DOM (Vital per prevenir l'error de bloqueig)
       wordDisplay = document.getElementById('word-display');
       inputBox = document.getElementById('input-box');
       timerBar = document.getElementById('timer-bar');
       scoreDisplay = document.getElementById('score-val');
-      statLabel = document.getElementById('stat-label');
       messageDisplay = document.getElementById('message');
       leaderboardList = document.getElementById('leaderboard-list');
       canvas = document.getElementById('fx-canvas');
